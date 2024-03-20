@@ -5,4 +5,7 @@ set(CMAKE_CXX_STANDARD 17)
 
 add_executable(crypto_2 main.cpp
         AES_256.cpp
-        AES_256.h)
+        AES_256.h
+        matrix.cpp
+        matrix.h
+)

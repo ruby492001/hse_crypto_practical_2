@@ -7,49 +7,66 @@
 
 using namespace std;
 
-
-vector< unsigned char > AES_256::crypt_data( const vector< unsigned char >& data, const std::vector< unsigned char >& key )
+AES_256::AES_256( AesKeyLength keyLength )
+:Nk( calculateNk( keyLength ) ), Nr( calculateNr( keyLength ) )
 {
-     if( data.size() % 16 != 0 )
+     // Nr и Nk зависят от размера ключа -> рассчитываем их при создании объекта в зависимости от размера ключа
+}
+
+
+vector< unsigned char > AES_256::cryptDataECB( const vector< unsigned char >& data, const std::vector< unsigned char >& key )
+{
+     // проверяем, что входные данные могут быть разбиты на блоки по oneBlockSize. Если нет - исключение
+     if( data.size() % oneBlockSize != 0 )
      {
           throw runtime_error( "data is not aligned" );
      }
 
-     unsigned char round_keys_matrix[ 4 ][ 60 ];
-     KeyExpansion( key, round_keys_matrix );
+     // создаем набор раундовых ключей, которые исользуются для шифрования
+     Matrix roundKeyMatrix = KeyExpansion( key );
 
+     // последовательно шифруем блоки открытого текста и шифртекст записываем в result
      std::vector< unsigned char > result;
-     for( int block = 0; block < data.size(); block+= 16 )
+     for( int block = 0; block < data.size(); block+= oneBlockSize )
      {
-          std::vector< unsigned char > tmp = crypt_block( { data.begin() + block, data.begin() + block + 16 }, round_keys_matrix );
+          std::vector< unsigned char > tmp = cryptBlock( { data.begin() + block, data.begin() + block + 16 }, roundKeyMatrix );
           result.insert( result.end(), std::make_move_iterator( tmp.begin() ), std::make_move_iterator( tmp.end() ) );
      }
      return result;
 }
 
 
-std::vector<unsigned char> AES_256::crypt_data_cbc( const vector<unsigned char>& data, const vector<unsigned char>& key,
+std::vector<unsigned char> AES_256::cryptDataCBC( const vector<unsigned char>& data, const vector<unsigned char>& key,
                                                     const vector<unsigned char>& iv )
 {
      if( data.size() % 16 != 0 )
      {
           throw runtime_error( "data is not aligned" );
      }
+     // проверяем, что размер вектора инициализации равен размеру блока открытого текста. Если нет -> исключение
+     // вектор инициализации в этом режиме используется для выполнения операции XOR над первым блоком открытого текста(т.к. первый блок не может выполнить
+     // операцию XOR над предыдущим блоком шифртекста
      if( iv.size() != oneBlockSize )
      {
           throw runtime_error( "iv has not valid size" );
      }
-     std::vector< unsigned char > last_encrypted_data = iv;
-     unsigned char round_keys_matrix[ 4 ][ 60 ];
-     KeyExpansion( key, round_keys_matrix );
+
+     // храним предыдущий блок шифртекста. Для первого блока используем IV
+     std::vector< unsigned char > lastEncryptedData = iv;
+     Matrix roundKeysMatrix = KeyExpansion( key );
 
      std::vector< unsigned char > result;
      for( int block = 0; block < data.size(); block+= 16 )
      {
           std::vector< unsigned char > src( data.begin() + block, data.begin() + block + 16 );
-          src = vector_xor( src, last_encrypted_data );
-          std::vector< unsigned char > tmp_result = crypt_block( src, round_keys_matrix );
-          last_encrypted_data = tmp_result;
+
+          // выполняем операцию XOR над последним блоком шифртекста и текущим открытым текстом
+          src = vector_xor( src, lastEncryptedData );
+          std::vector< unsigned char > tmp_result = cryptBlock( src, roundKeysMatrix );
+
+          // записываем текущий блок шифртекста для использования при шифровании следующего блока
+          lastEncryptedData = tmp_result;
+
           result.insert( result.end(), std::make_move_iterator( tmp_result.begin() ), std::make_move_iterator( tmp_result.end() ) );
      }
 
@@ -57,67 +74,67 @@ std::vector<unsigned char> AES_256::crypt_data_cbc( const vector<unsigned char>&
 }
 
 
-std::vector< unsigned char > AES_256::crypt_block( const vector< unsigned char >& data, unsigned char round_keys_matrix[ 4 ][ 60 ] )
+std::vector< unsigned char > AES_256::cryptBlock( const vector< unsigned char >& data, const Matrix& roundKeysMatrix )
 {
-     if( data.size() != 16 )
+     // проверям размер блока
+     if( data.size() != oneBlockSize )
      {
           throw runtime_error( "invalid block size" );
      }
-     unsigned char data_matrix[4][4];
-     block_to_matrix_4x4( data, data_matrix );
 
+     // создаем матрицу, содержащую в себе открытый текст. С ней будем работать при шифровании и затем преобразуем обратной в массив байт
+     Matrix dataMatrix = block_to_matrix_4x4( data );
+
+     // выполняем операции для шифрования из стандарта(п. 5.1, стр 15)
      int round_key_idx = 0;
-     addRoundKey( data_matrix, round_keys_matrix, round_key_idx );
+     addRoundKey( dataMatrix, roundKeysMatrix, round_key_idx );
      round_key_idx += 4;
 
      for( int round = 0; round < Nr - 1; round++ )
      {
-          subBytes( data_matrix );
-          shiftRows( data_matrix );
-          mixColumn( data_matrix );
-          addRoundKey( data_matrix, round_keys_matrix, round_key_idx );
+          subBytes( dataMatrix );
+          shiftRows( dataMatrix );
+          mixColumn( dataMatrix );
+          addRoundKey( dataMatrix, roundKeysMatrix, round_key_idx );
           round_key_idx += 4;
      }
 
-     subBytes( data_matrix );
-     shiftRows( data_matrix );
-     addRoundKey( data_matrix, round_keys_matrix, round_key_idx );
+     subBytes( dataMatrix );
+     shiftRows( dataMatrix );
+     addRoundKey( dataMatrix, roundKeysMatrix, round_key_idx );
 
 
-     return matrix_4_4_to_vector( data_matrix );
+     return matrix_4_4_to_vector( dataMatrix );
 }
 
 
-std::vector< unsigned char > AES_256::decrypt_data( const std::vector< unsigned char >& data, const std::vector< unsigned char >& key )
+std::vector< unsigned char > AES_256::decryptDataECB( const std::vector< unsigned char >& data, const std::vector< unsigned char >& key )
 {
      if( data.size() % 16 != 0 )
      {
           throw runtime_error( "data is not aligned" );
      }
 
-     unsigned char round_keys_matrix[ 4 ][ 60 ];
-     KeyExpansion( key, round_keys_matrix );
+     Matrix roundKeyMatrix = KeyExpansion( key );
 
      std::vector< unsigned char > result;
      for( int block = 0; block < data.size(); block+= 16 )
      {
-          std::vector< unsigned char > tmp = decrypt_block( { data.begin() + block, data.begin() + block + 16 }, round_keys_matrix );
+          std::vector< unsigned char > tmp = decryptBlock( { data.begin() + block, data.begin() + block + 16 }, roundKeyMatrix );
           result.insert( result.end(), std::make_move_iterator( tmp.begin() ), std::make_move_iterator( tmp.end() ) );
      }
 
      return result;
 }
 
-std::vector<unsigned char> AES_256::decrypt_data_cbc( const vector<unsigned char>& data, const vector<unsigned char>& key,
-                                                      const vector<unsigned char>& iv )
+std::vector<unsigned char> AES_256::decryptDataCBC( const std::vector<unsigned char>& data, const std::vector<unsigned char>& key, const std::vector<unsigned char>& iv )
 {
      if( data.size() % 16 != 0 )
      {
           throw runtime_error( "data is not aligned" );
      }
 
-     unsigned char round_keys_matrix[ 4 ][ 60 ];
-     KeyExpansion( key, round_keys_matrix );
+     Matrix roundKeyMatrix = KeyExpansion( key );
 
      std::vector< unsigned char > last_encrypted_data = iv;
 
@@ -125,7 +142,7 @@ std::vector<unsigned char> AES_256::decrypt_data_cbc( const vector<unsigned char
      for( int block = 0; block < data.size(); block+= 16 )
      {
           std::vector< unsigned char > src( data.begin() + block, data.begin() + block + 16 );
-          std::vector< unsigned char > tmp = decrypt_block( src, round_keys_matrix );
+          std::vector< unsigned char > tmp = decryptBlock( src, roundKeyMatrix );
           tmp = vector_xor( tmp, last_encrypted_data );
           last_encrypted_data = src;
           result.insert( result.end(), std::make_move_iterator( tmp.begin() ), std::make_move_iterator( tmp.end() ) );
@@ -135,92 +152,97 @@ std::vector<unsigned char> AES_256::decrypt_data_cbc( const vector<unsigned char
 }
 
 
-std::vector< unsigned char > AES_256::decrypt_block( const std::vector< unsigned char >& data, unsigned char round_keys_matrix[ 4 ][ 60 ] )
+std::vector< unsigned char > AES_256::decryptBlock( const std::vector<unsigned char>& data, const Matrix& roundKeysMatrix )
 {
      if( data.size() != 16 )
      {
           throw runtime_error( "invalid block size" );
      }
-     unsigned char data_matrix[4][4];
-     block_to_matrix_4x4( data, data_matrix );
+
+     Matrix dataMatrix = block_to_matrix_4x4( data );
 
      int roundKeyIdx = ( ( Nr + 1 ) ) * Nb - 4;
 
-     addRoundKey( data_matrix, round_keys_matrix, roundKeyIdx );
+     addRoundKey( dataMatrix, roundKeysMatrix, roundKeyIdx );
      roundKeyIdx -= 4;
 
      for( int round = Nr - 1; round > 0; round-- )
      {
-          invShiftRows( data_matrix );
-          invSubBytes( data_matrix );
-          addRoundKey( data_matrix, round_keys_matrix, roundKeyIdx );
+          invShiftRows( dataMatrix );
+          invSubBytes( dataMatrix );
+          addRoundKey( dataMatrix, roundKeysMatrix, roundKeyIdx );
           roundKeyIdx -= 4;
-          invMixColumn( data_matrix );
+          invMixColumn( dataMatrix );
      }
 
-     invShiftRows( data_matrix );
-     invSubBytes( data_matrix );
-     addRoundKey( data_matrix, round_keys_matrix, roundKeyIdx );
+     invShiftRows( dataMatrix );
+     invSubBytes( dataMatrix );
+     addRoundKey( dataMatrix, roundKeysMatrix, roundKeyIdx );
 
 
-     return matrix_4_4_to_vector( data_matrix );
+     return matrix_4_4_to_vector( dataMatrix );
 }
 
 
-void AES_256::block_to_matrix_4x4( const vector< unsigned char >& data, unsigned char data_matrix[ 4 ][ 4 ] )
+Matrix AES_256::block_to_matrix_4x4( const vector< unsigned char >& data )
 {
+     Matrix result( 4, 4 );
+
      for( int idx = 0; idx < data.size(); idx++ )
      {
-          data_matrix[ idx % 4 ][ idx / 4 ] = data[ idx ];
+          result[ idx % 4 ][ idx / 4 ] = data[ idx ];
      }
+     return result;
 }
 
 
-void AES_256::subBytes( unsigned char data_matrix[4][4] )
+void AES_256::subBytes( Matrix& matrix )
 {
-     unsigned char* bytes = *data_matrix;
-     for( int idx = 0; idx < 16; idx++ )
+     for( int row = 0; row < matrix.rowCount(); row++ )
      {
-          bytes[ idx ] = sbox[ bytes[ idx ] / 16 ][ bytes[ idx ] % 16 ];
+          for( int column = 0; column < matrix.columnCount(); column++ )
+          {
+               matrix[ row ][ column ]= sboxValue( matrix[ row ][ column ], sbox );
+          }
      }
 }
 
 
-void AES_256::shiftRows( unsigned char data_matrix[4][4] )
+void AES_256::shiftRows( Matrix& matrix )
 {
      for( int row = 0; row < 4; row++ )
      {
           int shift_count = row;
           while( shift_count != 0 )
           {
-               unsigned char first_byte = data_matrix[ row ][ 0 ];
+               unsigned char first_byte = matrix[ row ][ 0 ];
                for( int idx = 1; idx < 4; idx++ )
                {
-                    data_matrix[ row ][ idx - 1 ] = data_matrix[ row ][ idx ];
+                    matrix[ row ][ idx - 1 ] = matrix[ row ][ idx ];
                }
-               data_matrix[ row ][ 3 ] = first_byte;
+               matrix[ row ][ 3 ] = first_byte;
                shift_count--;
           }
      }
 }
 
 
-void AES_256::mixColumn( unsigned char data_matrix[ 4 ][ 4 ] )
+void AES_256::mixColumn( Matrix& matrix )
 {
      for( int column = 0; column < 4; column++ )
      {
           unsigned char tmp_column[4];
           for( int row = 0; row < 4; row++ )
           {
-               tmp_column[ row ] = multiplyBytes( mixColumnsMatrix[ row ][ 0 ],  data_matrix[ 0 ][ column ] ) ^
-                                   multiplyBytes( mixColumnsMatrix[ row ][ 1 ],  data_matrix[ 1 ][ column ] ) ^
-                                   multiplyBytes( mixColumnsMatrix[ row ][ 2 ],  data_matrix[ 2 ][ column ] ) ^
-                                   multiplyBytes( mixColumnsMatrix[ row ][ 3 ],  data_matrix[ 3 ][ column ] );
+               tmp_column[ row ] = multiplyBytes( mixColumnsMatrix[ row ][ 0 ],  matrix[ 0 ][ column ] ) ^
+                                   multiplyBytes( mixColumnsMatrix[ row ][ 1 ],  matrix[ 1 ][ column ] ) ^
+                                   multiplyBytes( mixColumnsMatrix[ row ][ 2 ],  matrix[ 2 ][ column ] ) ^
+                                   multiplyBytes( mixColumnsMatrix[ row ][ 3 ],  matrix[ 3 ][ column ] );
           }
 
           for( int row = 0; row < 4; row++ )
           {
-               data_matrix[ row ][ column ] = tmp_column[ row ];
+               matrix[ row ][ column ] = tmp_column[ row ];
           }
      }
 }
@@ -245,37 +267,40 @@ unsigned char AES_256::multiplyBytes( unsigned char a, unsigned char b )
 }
 
 
-void AES_256::KeyExpansion( const vector< unsigned char >& key, unsigned char round_keys_matrix[ 4 ][ 60 ] )
+Matrix AES_256::KeyExpansion( const vector< unsigned char >& key )
 {
      if( key.size() != Nk * 4 )
      {
           throw runtime_error( "invalid key size" );
      }
 
-     memset( round_keys_matrix,0x0, 240 );
+     // сохдаем матрицу раундовых ключей с размеров столбца в зависимости от размеры ключа
+     Matrix result( 4, Nb * ( Nr + 1 ) );
 
+     // заполняем первый раундовый ключ переданным ключом
      for( int row = 0; row < 4; row++ )
      {
           for( int column = 0; column < Nk; column++ )
           {
-               round_keys_matrix[ row ][ column ] = key[ row + 4 * column ];
+               result[ row ][ column ] = key[ row + 4 * column ];
           }
      }
 
-     for( int column = Nk; column < 60; column++ )
+     // заполняем матрицу в соответствии со стандартом(п 5.2, стр.19)
+     for( int column = Nk; column < result.columnCount(); column++ )
      {
           if( column % Nk == 0 )
           {
                unsigned char tmp_column[ 4 ];
-               shiftColumn( round_keys_matrix, column - 1, 1, tmp_column );
+               shiftColumn( result, column - 1, 1, tmp_column );
 
                for( int row = 0; row < 4; row++ )
                {
-                    tmp_column[ row ] = sbox[ tmp_column[ row ] / 16 ][ tmp_column[ row ] % 16 ];
+                    tmp_column[ row ] = sboxValue( tmp_column[ row ], sbox );
                }
                for( int row = 0; row < 4; row++ )
                {
-                    round_keys_matrix[ row ][ column ] = round_keys_matrix[ row ][ column - Nk ] ^ tmp_column[ row ] ^
+                    result[ row ][ column ] = result[ row ][ column - Nk ] ^ tmp_column[ row ] ^
                             rcon( row, column / Nk - 1 );
                }
           }
@@ -283,27 +308,26 @@ void AES_256::KeyExpansion( const vector< unsigned char >& key, unsigned char ro
           {
                for( int row = 0; row < 4; row++ )
                {
-                    round_keys_matrix[ row ][ column ] = round_keys_matrix[ row ][ column - Nk ] ^ sbox[ round_keys_matrix[ row ][ column - 1 ] / 16 ][ round_keys_matrix[ row ][ column - 1 ] % 16 ];
+                    result[ row ][ column ] = result[ row ][ column - Nk ] ^ sboxValue( result[ row ][ column - 1 ], sbox );
                }
           }
           else
           {
                for( int row = 0; row < 4; row++ )
                {
-                    round_keys_matrix[ row ][ column ] = round_keys_matrix[ row ][ column - Nk ] ^ round_keys_matrix[ row ][ column - 1 ];
+                    result[ row ][ column ] = result[ row ][ column - Nk ] ^ result[ row ][ column - 1 ];
                }
           }
-          //print_matrix( round_keys_matrix );
      }
-     //print_matrix( round_keys_matrix );
+     return result;
 }
 
 
-void AES_256::shiftColumn( unsigned char round_keys_matrix[ 4 ][ 60 ], int column, int shift, unsigned char result[ 4 ] )
+void AES_256::shiftColumn( const Matrix& matrix, int column, int shift, unsigned char result[ 4 ] )
 {
      for( int row = 0; row < 4; row++ )
      {
-          result[ row ] = round_keys_matrix[ row ][ column ];
+          result[ row ] = matrix[ row ][ column ];
      }
      while( shift != 0 )
      {
@@ -336,19 +360,19 @@ unsigned char AES_256::rcon( int row, int column )
 }
 
 
-void AES_256::addRoundKey(  unsigned char data_matrix[ 4 ][ 4 ], unsigned char round_keys_matrix[ 4 ][ 60 ], int first_column )
+void AES_256::addRoundKey( Matrix& matrix, const Matrix& round_keys_matrix, int first_column )
 {
-     for( int row = 0; row < 4; row++ )
+     for( int row = 0; row < matrix.rowCount(); row++ )
      {
-          for( int column = 0; column < 4; column++ )
+          for( int column = 0; column < matrix.columnCount(); column++ )
           {
-               data_matrix[ row ][ column ] ^= round_keys_matrix[ row ][ column + first_column ];
+               matrix[ row ][ column ] ^= round_keys_matrix[ row ][ column + first_column ];
           }
      }
 }
 
 
-std::vector< unsigned char > AES_256::matrix_4_4_to_vector( unsigned char data_matrix[ 4 ][ 4 ] )
+std::vector< unsigned char > AES_256::matrix_4_4_to_vector( const Matrix& matrix )
 {
      std::vector< unsigned char > result;
      result.resize( 4 * Nb );
@@ -356,71 +380,61 @@ std::vector< unsigned char > AES_256::matrix_4_4_to_vector( unsigned char data_m
      {
           for( int column = 0; column < Nb; column++ )
           {
-               result[ row + 4 * column ] = data_matrix[ row ][ column ];
+               result[ row + 4 * column ] = matrix[ row ][ column ];
           }
      }
      return result;
 }
 
-void AES_256::print_matrix( unsigned char data_matrix[4][60] )
+
+
+void AES_256::invSubBytes( Matrix& matrix )
 {
-     for( int row = 0; row < 4; row++ )
+     for( int row = 0; row < matrix.rowCount(); row++ )
      {
-          for( int column = 0; column < 60; column++ )
+          for( int column = 0; column < matrix.columnCount(); column++ )
           {
-               std::cout << std::hex << "0x" << (int)data_matrix[ row ][ column ] << ' ';
+               matrix[ row ][ column ]= sboxValue( matrix[ row ][ column ], invSbox );
           }
-          std::cout << std::endl;
-     }
-     std::cout << std::endl;
-}
-
-
-void AES_256::invSubBytes( unsigned char data_matrix[ 4 ][ 4 ] )
-{
-     unsigned char* bytes = *data_matrix;
-     for( int idx = 0; idx < 16; idx++ )
-     {
-          bytes[ idx ] = invSbox[ bytes[ idx ] / 16 ][ bytes[ idx ] % 16 ];
      }
 }
 
 
-void AES_256::invShiftRows( unsigned char data_matrix[ 4 ][ 4 ] )
+void AES_256::invShiftRows( Matrix& matrix )
 {
      for( int row = 0; row < 4; row++ )
      {
           int shift_count = row;
           while( shift_count != 0 )
           {
-               unsigned char first_byte = data_matrix[ row ][ 3 ];
+               unsigned char first_byte = matrix[ row ][ 3 ];
                for( int idx = 3; idx > 0; idx-- )
                {
-                    data_matrix[ row ][ idx ] = data_matrix[ row ][ idx - 1 ];
+                    matrix[ row ][ idx ] = matrix[ row ][ idx - 1 ];
                }
-               data_matrix[ row ][ 0 ] = first_byte;
+               matrix[ row ][ 0 ] = first_byte;
                shift_count--;
           }
      }
 }
 
 
-void AES_256::invMixColumn( unsigned char data_matrix[ 4 ][ 4 ] )
+void AES_256::invMixColumn( Matrix& matrix )
 {
      for( int column = 0; column < 4; column++ )
      {
           unsigned char tmp_column[4];
           for( int row = 0; row < 4; row++ )
           {
-               tmp_column[ row ] = multiplyBytes( invMixColumnsMatrix[ row ][ 0 ],  data_matrix[ 0 ][ column ] ) ^
-                                   multiplyBytes( invMixColumnsMatrix[ row ][ 1 ],  data_matrix[ 1 ][ column ] ) ^
-                                   multiplyBytes( invMixColumnsMatrix[ row ][ 2 ],  data_matrix[ 2 ][ column ] ) ^
-                                   multiplyBytes( invMixColumnsMatrix[ row ][ 3 ],  data_matrix[ 3 ][ column ] );
+               tmp_column[ row ] = multiplyBytes( invMixColumnsMatrix[ row ][ 0 ],  matrix[ 0 ][ column ] ) ^
+                                   multiplyBytes( invMixColumnsMatrix[ row ][ 1 ],  matrix[ 1 ][ column ] ) ^
+                                   multiplyBytes( invMixColumnsMatrix[ row ][ 2 ],  matrix[ 2 ][ column ] ) ^
+                                   multiplyBytes( invMixColumnsMatrix[ row ][ 3 ],  matrix[ 3 ][ column ] );
           }
 
           for( int row = 0; row < 4; row++ )
           {
-               data_matrix[ row ][ column ] = tmp_column[ row ];
+               matrix[ row ][ column ] = tmp_column[ row ];
           }
      }
 }
@@ -454,6 +468,54 @@ std::vector<unsigned char> AES_256::create_iv()
           result.push_back( dist6( rng ) );
      }
      return result;
+}
+
+
+int AES_256::calculateNk( AesKeyLength len ) const
+{
+     switch( len )
+     {
+          case AKL_128:
+          {
+               return 4;
+          }
+          case AKL_192:
+          {
+               return 6;
+          }
+          case AKL_256:
+          {
+               return 8;
+          }
+     }
+     return 0;
+}
+
+
+int AES_256::calculateNr( AesKeyLength len ) const
+{
+     switch( len )
+     {
+          case AKL_128:
+          {
+               return 10;
+          }
+          case AKL_192:
+          {
+               return 12;
+          }
+          case AKL_256:
+          {
+               return 14;
+          }
+     }
+     return 0;
+}
+
+
+unsigned char AES_256::sboxValue( unsigned char src, const unsigned char sboxMatrix[16][16] )
+{
+     return sboxMatrix[ src / 16 ][ src % 16 ];
 }
 
 

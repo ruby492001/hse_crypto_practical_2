@@ -1,42 +1,83 @@
 #pragma once
 
 #include <vector>
+#include "matrix.h"
 
+
+enum AesKeyLength
+{
+     AKL_128,
+     AKL_192,
+     AKL_256
+};
 
 class AES_256
 {
 public:
-    AES_256() = default;
+    AES_256( AesKeyLength keyLength );
 
-    std::vector< unsigned char > crypt_data( const std::vector< unsigned char >& data, const std::vector< unsigned char >& key );
-    std::vector< unsigned char > crypt_data_cbc( const std::vector< unsigned char >& data, const std::vector< unsigned char >& key, const std::vector< unsigned char >& iv );
-    std::vector< unsigned char > crypt_block( const std::vector< unsigned char >& data, unsigned char round_keys_matrix[ 4 ][ 60 ] );
+     // выполняет шифрование в режиме ECB(режим простой замены)
+     std::vector< unsigned char > cryptDataECB( const std::vector< unsigned char >& data, const std::vector< unsigned char >& key );
 
-    std::vector< unsigned char > decrypt_data( const std::vector< unsigned char >& data, const std::vector< unsigned char >& key );
-    std::vector< unsigned char > decrypt_data_cbc( const std::vector< unsigned char >& data, const std::vector< unsigned char >& key, const std::vector< unsigned char >& iv );
-    std::vector< unsigned char > decrypt_block( const std::vector< unsigned char >& data, unsigned char round_keys_matrix[ 4 ][ 60 ] );
+     // выполняет шифрование в режиме CBC(режим сцепления блоков шифрованного текста)
+     std::vector< unsigned char > cryptDataCBC( const std::vector< unsigned char >& data, const std::vector< unsigned char >& key, const std::vector< unsigned char >& iv );
 
-    void block_to_matrix_4x4( const std::vector< unsigned char >& data, unsigned char data_matrix[ 4 ][ 4 ] );
-    std::vector< unsigned char > matrix_4_4_to_vector( unsigned char data_matrix[ 4 ][ 4 ] );
+     // создает случайный вектор инициализации
+     std::vector< unsigned char > create_iv();
 
-    void subBytes( unsigned char data_matrix[4][4] );
-    void shiftRows( unsigned char data_matrix[4][4] );
-    void mixColumn( unsigned char data_matrix[4][4] );
-    void addRoundKey( unsigned char data_matrix[4][4], unsigned char round_keys_matrix[ 4 ][ 60 ], int first_column );
-    void KeyExpansion( const std::vector< unsigned char >& key, unsigned char round_keys_matrix[ 4 ][ 60 ] );
+     // выполняет расшифрование данных в режиме ECB
+     std::vector< unsigned char > decryptDataECB( const std::vector< unsigned char >& data, const std::vector< unsigned char >& key );
 
-    void invSubBytes( unsigned char data_matrix[4][4] );
-    void invShiftRows( unsigned char data_matrix[4][4] );
-    void invMixColumn( unsigned char data_matrix[4][4] );
+     // выполняет расшифрование данных в режиме CBC
+     std::vector< unsigned char > decryptDataCBC( const std::vector< unsigned char >& data, const std::vector< unsigned char >& key, const std::vector< unsigned char >& iv );
 
-    unsigned char multiplyBytes( unsigned char a, unsigned char b );
+private:
+     // выполняет шифрование одного блока данных
+     std::vector< unsigned char > cryptBlock( const std::vector< unsigned char >& data, const Matrix& roundKeysMatrix );
 
-    void shiftColumn( unsigned char round_keys_matrix[ 4 ][ 60 ], int column, int shift, unsigned char result[ 4 ] );
-    unsigned char rcon( int row, int column );
+     // выполняет расшифрование одного блока данных
+     std::vector< unsigned char > decryptBlock( const std::vector< unsigned char >& data, const Matrix& roundKeysMatrix );
 
-    void print_matrix( unsigned char data_matrix[4][60] );
-    std::vector< unsigned char > vector_xor( const std::vector< unsigned char >& lhs, const std::vector< unsigned char >& rhs );
-    std::vector< unsigned char > create_iv();
+     // функции для преобразования из массива байт(матрицы 4x4) в матрицу 4х4(массив байт)
+     Matrix block_to_matrix_4x4( const std::vector< unsigned char >& data );
+     std::vector< unsigned char > matrix_4_4_to_vector( const Matrix& matrix );
+
+     // выполняет замену каждого байта исходной матрицы на элемент таблицы sbox
+     void subBytes( Matrix& matrix );
+
+     // циклический сдвиг влево на n позиций(где n = 0 для 1 строки, 1 для 2, 2 для 3, и 3 для 4)
+     void shiftRows( Matrix& matrix );
+
+     // выполняет умножение каждой колонки в поле GF(2^8) по модулю x^4 + 1 с многочленом  3x^3 + x^2 + x + 2(из стандарта)
+     void mixColumn( Matrix& matrix );
+
+     // выполняет XOR между элементасм из data_matrix и round_keys_matrix. При этом за первый столбец матрицы round_keys_matrix принимается first_column
+     void addRoundKey( Matrix& matrix, const Matrix& round_keys_matrix, int first_column );
+
+     // пробразования, обратные subBytes shiftRows mixColumn. используются при расшифровании
+     void invSubBytes( Matrix& matrix );
+     void invShiftRows( Matrix& matrix );
+     void invMixColumn( Matrix& matrix );
+
+     // метод для создания матрицы наборов раундовых ключей в соответствии с ключом
+     Matrix KeyExpansion( const std::vector< unsigned char >& key );
+
+     // перемножает байты в поле  GF(2^8)
+     unsigned char multiplyBytes( unsigned char a, unsigned char b );
+
+     // выполняет циклический сдвиг влево столбца column на shift позиций матрицы matrix и возвращает результат в поле result
+     void shiftColumn( const Matrix& matrix, int column, int shift, unsigned char result[ 4 ] );
+
+     // возвращает значение из таблицы rcon(стандарт, A.1, стр 27)
+     unsigned char rcon( int row, int column );
+
+     std::vector< unsigned char > vector_xor( const std::vector< unsigned char >& lhs, const std::vector< unsigned char >& rhs );
+
+     int calculateNk( AesKeyLength len ) const;
+     int calculateNr( AesKeyLength len ) const;
+
+     // преобразует байт src по таблице sbox или invSbox, в зависимости от того, что передано в параметре sboxMatrix
+     unsigned char sboxValue( unsigned char src, const unsigned char sboxMatrix[16][16] );
 
 private:
      const unsigned char sbox[16][16] =
@@ -96,7 +137,8 @@ private:
      };
 
      const int Nb = 4;                  // число слов по 32 бита
-     const int oneBlockSize = Nb * 4;   // число байтов в одном блоке данных
-     const int Nk = 8;                  // длина ключа в 32-х битных словах 8
-     const int Nr = 14;                 // число раундов шифрования 14
+     const int oneBlockSize = Nb * 4;   // число байтов в одном блоке текста
+
+     const int Nk;                  // длина ключа в 32-х битных словах 8
+     const int Nr;                 // число раундов шифрования 14
 };
