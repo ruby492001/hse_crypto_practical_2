@@ -3,6 +3,7 @@
 #include <stdexcept>
 #include <cstring>
 #include <iostream>
+#include <random>
 
 using namespace std;
 
@@ -23,6 +24,35 @@ vector< unsigned char > AES_256::crypt_data( const vector< unsigned char >& data
           std::vector< unsigned char > tmp = crypt_block( { data.begin() + block, data.begin() + block + 16 }, round_keys_matrix );
           result.insert( result.end(), std::make_move_iterator( tmp.begin() ), std::make_move_iterator( tmp.end() ) );
      }
+     return result;
+}
+
+
+std::vector<unsigned char> AES_256::crypt_data_cbc( const vector<unsigned char>& data, const vector<unsigned char>& key,
+                                                    const vector<unsigned char>& iv )
+{
+     if( data.size() % 16 != 0 )
+     {
+          throw runtime_error( "data is not aligned" );
+     }
+     if( iv.size() != oneBlockSize )
+     {
+          throw runtime_error( "iv has not valid size" );
+     }
+     std::vector< unsigned char > last_encrypted_data = iv;
+     unsigned char round_keys_matrix[ 4 ][ 60 ];
+     KeyExpansion( key, round_keys_matrix );
+
+     std::vector< unsigned char > result;
+     for( int block = 0; block < data.size(); block+= 16 )
+     {
+          std::vector< unsigned char > src( data.begin() + block, data.begin() + block + 16 );
+          src = vector_xor( src, last_encrypted_data );
+          std::vector< unsigned char > tmp_result = crypt_block( src, round_keys_matrix );
+          last_encrypted_data = tmp_result;
+          result.insert( result.end(), std::make_move_iterator( tmp_result.begin() ), std::make_move_iterator( tmp_result.end() ) );
+     }
+
      return result;
 }
 
@@ -72,6 +102,32 @@ std::vector< unsigned char > AES_256::decrypt_data( const std::vector< unsigned 
      for( int block = 0; block < data.size(); block+= 16 )
      {
           std::vector< unsigned char > tmp = decrypt_block( { data.begin() + block, data.begin() + block + 16 }, round_keys_matrix );
+          result.insert( result.end(), std::make_move_iterator( tmp.begin() ), std::make_move_iterator( tmp.end() ) );
+     }
+
+     return result;
+}
+
+std::vector<unsigned char> AES_256::decrypt_data_cbc( const vector<unsigned char>& data, const vector<unsigned char>& key,
+                                                      const vector<unsigned char>& iv )
+{
+     if( data.size() % 16 != 0 )
+     {
+          throw runtime_error( "data is not aligned" );
+     }
+
+     unsigned char round_keys_matrix[ 4 ][ 60 ];
+     KeyExpansion( key, round_keys_matrix );
+
+     std::vector< unsigned char > last_encrypted_data = iv;
+
+     std::vector< unsigned char > result;
+     for( int block = 0; block < data.size(); block+= 16 )
+     {
+          std::vector< unsigned char > src( data.begin() + block, data.begin() + block + 16 );
+          std::vector< unsigned char > tmp = decrypt_block( src, round_keys_matrix );
+          tmp = vector_xor( tmp, last_encrypted_data );
+          last_encrypted_data = src;
           result.insert( result.end(), std::make_move_iterator( tmp.begin() ), std::make_move_iterator( tmp.end() ) );
      }
 
@@ -368,4 +424,36 @@ void AES_256::invMixColumn( unsigned char data_matrix[ 4 ][ 4 ] )
           }
      }
 }
+
+std::vector< unsigned char > AES_256::vector_xor( const vector<unsigned char>& lhs, const vector<unsigned char>& rhs )
+{
+     if( lhs.size() != rhs.size() )
+     {
+          throw std::runtime_error( "could not xor vectors with different size" );
+     }
+
+     std::vector< unsigned char > result;
+     result.resize( lhs.size() );
+     for( int idx = 0; idx < lhs.size(); idx++ )
+     {
+          result[ idx ] = lhs[ idx ] ^ rhs[ idx ];
+     }
+     return result;
+}
+
+
+std::vector<unsigned char> AES_256::create_iv()
+{
+     std::vector<unsigned char > result;
+     std::random_device dev;
+     std::mt19937 rng(dev());
+     std::uniform_int_distribution<std::mt19937::result_type> dist6( 0,255 );
+
+     for( int cnt = oneBlockSize; cnt > 0; cnt-- )
+     {
+          result.push_back( dist6( rng ) );
+     }
+     return result;
+}
+
 

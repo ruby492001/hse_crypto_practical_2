@@ -9,9 +9,11 @@ public:
     AES_256() = default;
 
     std::vector< unsigned char > crypt_data( const std::vector< unsigned char >& data, const std::vector< unsigned char >& key );
+    std::vector< unsigned char > crypt_data_cbc( const std::vector< unsigned char >& data, const std::vector< unsigned char >& key, const std::vector< unsigned char >& iv );
     std::vector< unsigned char > crypt_block( const std::vector< unsigned char >& data, unsigned char round_keys_matrix[ 4 ][ 60 ] );
 
     std::vector< unsigned char > decrypt_data( const std::vector< unsigned char >& data, const std::vector< unsigned char >& key );
+    std::vector< unsigned char > decrypt_data_cbc( const std::vector< unsigned char >& data, const std::vector< unsigned char >& key, const std::vector< unsigned char >& iv );
     std::vector< unsigned char > decrypt_block( const std::vector< unsigned char >& data, unsigned char round_keys_matrix[ 4 ][ 60 ] );
 
     void block_to_matrix_4x4( const std::vector< unsigned char >& data, unsigned char data_matrix[ 4 ][ 4 ] );
@@ -33,6 +35,9 @@ public:
     unsigned char rcon( int row, int column );
 
     void print_matrix( unsigned char data_matrix[4][60] );
+    std::vector< unsigned char > vector_xor( const std::vector< unsigned char >& lhs, const std::vector< unsigned char >& rhs );
+    std::vector< unsigned char > create_iv();
+
 private:
      const unsigned char sbox[16][16] =
      {
@@ -90,7 +95,8 @@ private:
           { 0x0b, 0x0d, 0x09, 0x0e }
      };
 
-     const int Nb = 4;   // число слов по 32 бита
-     const int Nk = 8;   // длина ключа в 32-х битных словах 8
-     const int Nr = 14;  // число раундов шифрования 14
+     const int Nb = 4;                  // число слов по 32 бита
+     const int oneBlockSize = Nb * 4;   // число байтов в одном блоке данных
+     const int Nk = 8;                  // длина ключа в 32-х битных словах 8
+     const int Nr = 14;                 // число раундов шифрования 14
 };
