@@ -1,4 +1,4 @@
-#include "AES_256.h"
+#include "AES_cryptography.h"
 
 #include <stdexcept>
 #include <cstring>
@@ -7,14 +7,14 @@
 
 using namespace std;
 
-AES_256::AES_256( AesKeyLength keyLength )
+AESCryptography::AESCryptography( AesKeyLength keyLength )
 :Nk( calculateNk( keyLength ) ), Nr( calculateNr( keyLength ) )
 {
      // Nr и Nk зависят от размера ключа -> рассчитываем их при создании объекта в зависимости от размера ключа
 }
 
 
-vector< unsigned char > AES_256::cryptDataECB( const vector< unsigned char >& data, const std::vector< unsigned char >& key )
+vector< unsigned char > AESCryptography::cryptDataECB( const vector< unsigned char >& data, const std::vector< unsigned char >& key )
 {
      // проверяем, что входные данные могут быть разбиты на блоки по oneBlockSize. Если нет - исключение
      if( data.size() % oneBlockSize != 0 )
@@ -36,8 +36,8 @@ vector< unsigned char > AES_256::cryptDataECB( const vector< unsigned char >& da
 }
 
 
-std::vector<unsigned char> AES_256::cryptDataCBC( const vector<unsigned char>& data, const vector<unsigned char>& key,
-                                                    const vector<unsigned char>& iv )
+std::vector<unsigned char> AESCryptography::cryptDataCBC( const vector<unsigned char>& data, const vector<unsigned char>& key,
+                                                           const vector<unsigned char>& iv )
 {
      if( data.size() % 16 != 0 )
      {
@@ -74,7 +74,7 @@ std::vector<unsigned char> AES_256::cryptDataCBC( const vector<unsigned char>& d
 }
 
 
-std::vector< unsigned char > AES_256::cryptBlock( const vector< unsigned char >& data, const Matrix& roundKeysMatrix )
+std::vector< unsigned char > AESCryptography::cryptBlock( const vector< unsigned char >& data, const Matrix& roundKeysMatrix )
 {
      // проверям размер блока
      if( data.size() != oneBlockSize )
@@ -108,7 +108,7 @@ std::vector< unsigned char > AES_256::cryptBlock( const vector< unsigned char >&
 }
 
 
-std::vector< unsigned char > AES_256::decryptDataECB( const std::vector< unsigned char >& data, const std::vector< unsigned char >& key )
+std::vector< unsigned char > AESCryptography::decryptDataECB( const std::vector< unsigned char >& data, const std::vector< unsigned char >& key )
 {
      if( data.size() % 16 != 0 )
      {
@@ -127,7 +127,7 @@ std::vector< unsigned char > AES_256::decryptDataECB( const std::vector< unsigne
      return result;
 }
 
-std::vector<unsigned char> AES_256::decryptDataCBC( const std::vector<unsigned char>& data, const std::vector<unsigned char>& key, const std::vector<unsigned char>& iv )
+std::vector<unsigned char> AESCryptography::decryptDataCBC( const std::vector<unsigned char>& data, const std::vector<unsigned char>& key, const std::vector<unsigned char>& iv )
 {
      if( data.size() % 16 != 0 )
      {
@@ -152,7 +152,7 @@ std::vector<unsigned char> AES_256::decryptDataCBC( const std::vector<unsigned c
 }
 
 
-std::vector< unsigned char > AES_256::decryptBlock( const std::vector<unsigned char>& data, const Matrix& roundKeysMatrix )
+std::vector< unsigned char > AESCryptography::decryptBlock( const std::vector<unsigned char>& data, const Matrix& roundKeysMatrix )
 {
      if( data.size() != 16 )
      {
@@ -184,7 +184,7 @@ std::vector< unsigned char > AES_256::decryptBlock( const std::vector<unsigned c
 }
 
 
-Matrix AES_256::block_to_matrix_4x4( const vector< unsigned char >& data )
+Matrix AESCryptography::block_to_matrix_4x4( const vector< unsigned char >& data )
 {
      Matrix result( 4, 4 );
 
@@ -196,7 +196,7 @@ Matrix AES_256::block_to_matrix_4x4( const vector< unsigned char >& data )
 }
 
 
-void AES_256::subBytes( Matrix& matrix )
+void AESCryptography::subBytes( Matrix& matrix )
 {
      for( int row = 0; row < matrix.rowCount(); row++ )
      {
@@ -208,7 +208,7 @@ void AES_256::subBytes( Matrix& matrix )
 }
 
 
-void AES_256::shiftRows( Matrix& matrix )
+void AESCryptography::shiftRows( Matrix& matrix )
 {
      for( int row = 0; row < 4; row++ )
      {
@@ -227,7 +227,7 @@ void AES_256::shiftRows( Matrix& matrix )
 }
 
 
-void AES_256::mixColumn( Matrix& matrix )
+void AESCryptography::mixColumn( Matrix& matrix )
 {
      for( int column = 0; column < 4; column++ )
      {
@@ -248,7 +248,7 @@ void AES_256::mixColumn( Matrix& matrix )
 }
 
 
-unsigned char AES_256::multiplyBytes( unsigned char a, unsigned char b )
+unsigned char AESCryptography::multiplyBytes( unsigned char a, unsigned char b )
 {
      unsigned char result = 0;
      unsigned char high_bit_set;
@@ -267,7 +267,7 @@ unsigned char AES_256::multiplyBytes( unsigned char a, unsigned char b )
 }
 
 
-Matrix AES_256::KeyExpansion( const vector< unsigned char >& key )
+Matrix AESCryptography::KeyExpansion( const vector< unsigned char >& key )
 {
      if( key.size() != Nk * 4 )
      {
@@ -323,7 +323,7 @@ Matrix AES_256::KeyExpansion( const vector< unsigned char >& key )
 }
 
 
-void AES_256::shiftColumn( const Matrix& matrix, int column, int shift, unsigned char result[ 4 ] )
+void AESCryptography::shiftColumn( const Matrix& matrix, int column, int shift, unsigned char result[ 4 ] )
 {
      for( int row = 0; row < 4; row++ )
      {
@@ -342,7 +342,7 @@ void AES_256::shiftColumn( const Matrix& matrix, int column, int shift, unsigned
 }
 
 
-unsigned char AES_256::rcon( int row, int column )
+unsigned char AESCryptography::rcon( int row, int column )
 {
      if( row != 0 )
      {
@@ -360,7 +360,7 @@ unsigned char AES_256::rcon( int row, int column )
 }
 
 
-void AES_256::addRoundKey( Matrix& matrix, const Matrix& round_keys_matrix, int first_column )
+void AESCryptography::addRoundKey( Matrix& matrix, const Matrix& round_keys_matrix, int first_column )
 {
      for( int row = 0; row < matrix.rowCount(); row++ )
      {
@@ -372,7 +372,7 @@ void AES_256::addRoundKey( Matrix& matrix, const Matrix& round_keys_matrix, int 
 }
 
 
-std::vector< unsigned char > AES_256::matrix_4_4_to_vector( const Matrix& matrix )
+std::vector< unsigned char > AESCryptography::matrix_4_4_to_vector( const Matrix& matrix )
 {
      std::vector< unsigned char > result;
      result.resize( 4 * Nb );
@@ -388,7 +388,7 @@ std::vector< unsigned char > AES_256::matrix_4_4_to_vector( const Matrix& matrix
 
 
 
-void AES_256::invSubBytes( Matrix& matrix )
+void AESCryptography::invSubBytes( Matrix& matrix )
 {
      for( int row = 0; row < matrix.rowCount(); row++ )
      {
@@ -400,7 +400,7 @@ void AES_256::invSubBytes( Matrix& matrix )
 }
 
 
-void AES_256::invShiftRows( Matrix& matrix )
+void AESCryptography::invShiftRows( Matrix& matrix )
 {
      for( int row = 0; row < 4; row++ )
      {
@@ -419,7 +419,7 @@ void AES_256::invShiftRows( Matrix& matrix )
 }
 
 
-void AES_256::invMixColumn( Matrix& matrix )
+void AESCryptography::invMixColumn( Matrix& matrix )
 {
      for( int column = 0; column < 4; column++ )
      {
@@ -439,7 +439,7 @@ void AES_256::invMixColumn( Matrix& matrix )
      }
 }
 
-std::vector< unsigned char > AES_256::vector_xor( const vector<unsigned char>& lhs, const vector<unsigned char>& rhs )
+std::vector< unsigned char > AESCryptography::vector_xor( const vector<unsigned char>& lhs, const vector<unsigned char>& rhs )
 {
      if( lhs.size() != rhs.size() )
      {
@@ -456,7 +456,7 @@ std::vector< unsigned char > AES_256::vector_xor( const vector<unsigned char>& l
 }
 
 
-std::vector<unsigned char> AES_256::create_iv()
+std::vector<unsigned char> AESCryptography::create_iv()
 {
      std::vector<unsigned char > result;
      std::random_device dev;
@@ -471,7 +471,7 @@ std::vector<unsigned char> AES_256::create_iv()
 }
 
 
-int AES_256::calculateNk( AesKeyLength len ) const
+int AESCryptography::calculateNk( AesKeyLength len ) const
 {
      switch( len )
      {
@@ -492,7 +492,7 @@ int AES_256::calculateNk( AesKeyLength len ) const
 }
 
 
-int AES_256::calculateNr( AesKeyLength len ) const
+int AESCryptography::calculateNr( AesKeyLength len ) const
 {
      switch( len )
      {
@@ -513,7 +513,7 @@ int AES_256::calculateNr( AesKeyLength len ) const
 }
 
 
-unsigned char AES_256::sboxValue( unsigned char src, const unsigned char sboxMatrix[16][16] )
+unsigned char AESCryptography::sboxValue( unsigned char src, const unsigned char sboxMatrix[16][16] )
 {
      return sboxMatrix[ src / 16 ][ src % 16 ];
 }

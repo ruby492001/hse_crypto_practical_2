@@ -11,10 +11,10 @@ enum AesKeyLength
      AKL_256
 };
 
-class AES_256
+class AESCryptography
 {
 public:
-    AES_256( AesKeyLength keyLength );
+     AESCryptography( AesKeyLength keyLength );
 
      // выполняет шифрование в режиме ECB(режим простой замены)
      std::vector< unsigned char > cryptDataECB( const std::vector< unsigned char >& data, const std::vector< unsigned char >& key );
