@@ -5,7 +5,7 @@
 
 void printHelp()
 {
-     std::cout << "Usage: {encrypt/decrypt} {CBC/ECB} {KEY in HEX format} {Source file path} {Destination file path }" << std::endl;
+     std::cout << "Usage: {encrypt/decrypt} {CBC/ECB} {KEY in HEX format} {Source file path} {Destination file path} {OPTIONAL: IV in HEX format}" << std::endl;
      std::cout << "Examples:\n"
                     "\tencrypt CBC 88CF1B7478A797F03F54527B50EF6D427B8F8C9C4EFB7FC20AA06B0DCD94FD35 file_to_crypt.txt encrypted_file.txt\n"
                     "\tdecrypt CBC 88CF1B7478A797F03F54527B50EF6D427B8F8C9C4EFB7FC20AA06B0DCD94FD35 encrypted_file.txt decrypted_file.txt" << std::endl;
@@ -19,7 +19,7 @@ void exec( const std::vector< std::string >& args )
      std::vector< unsigned char > key = FileEncryptor::hexToArray( args[ 2 ] );
      std::string inputFile = args[ 3 ];
      std::string outputFile = args[ 4 ];
-
+     std::vector< unsigned char > iv;
      if( args[ 0 ] == "decrypt" )
      {
           decrypt = true;
@@ -38,15 +38,20 @@ void exec( const std::vector< std::string >& args )
           throw std::runtime_error( "incorrect encrypt mode: " + args[ 1 ] );
      }
 
+     if( args.size() >= 6 )
+     {
+          iv = FileEncryptor::hexToArray( args[ 5 ] );
+     }
+
      FileEncryptor fileCrypt( inputFile, outputFile );
 
      if( decrypt )
      {
-          fileCrypt.decryptFile( key, cbc ? CMCbc : CMEcb );
+          fileCrypt.decryptFile( key, cbc ? CMCbc : CMEcb, iv );
      }
      else
      {
-          fileCrypt.cryptFile( key, cbc ? CMCbc : CMEcb );
+          fileCrypt.cryptFile( key, cbc ? CMCbc : CMEcb, iv );
      }
 }
 
@@ -60,7 +65,7 @@ int main( int argc, char* argv[] )
      }
 
      std::vector< std::string > args;
-     for( int idx = 1; idx < 6; idx++ )
+     for( int idx = 1; idx < argc; idx++ )
      {
           args.emplace_back( argv[ idx ] );
      }

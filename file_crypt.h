@@ -13,8 +13,8 @@ class FileEncryptor
 {
 public:
      FileEncryptor( const std::string& srcPath, const std::string& dstPath );
-     void cryptFile( const std::vector< unsigned char >& key, CryptMode mode );
-     void decryptFile( const std::vector< unsigned char >& key, CryptMode mode );
+     void cryptFile( const std::vector< unsigned char >& key, CryptMode mode, const std::vector< unsigned char >& iv = {} );
+     void decryptFile( const std::vector< unsigned char >& key, CryptMode mode, const std::vector< unsigned char >& iv = {} );
 
      static std::vector< unsigned char > hexToArray( const std::string& str );
 private:
@@ -24,9 +24,6 @@ private:
 
      // расчитывает длину ключа шифрования/расшифрования из ключа
      AesKeyLength keyLengthFromKey( const std::vector< unsigned char >& key );
-
-     // извлекает IV из массива и возвращает его
-     std::vector< unsigned char >  extractIv( std::vector< unsigned char >& data );
 
 private:
      const std::string srcPath_;

@@ -1,6 +1,5 @@
 #include "file_crypt.h"
 #include <fstream>
-#include <exception>
 
 
 
@@ -10,7 +9,7 @@ FileEncryptor::FileEncryptor( const std::string& srcPath, const std::string& dst
 }
 
 
-void FileEncryptor::cryptFile( const std::vector< unsigned char >& key, CryptMode mode )
+void FileEncryptor::cryptFile( const std::vector< unsigned char >& key, CryptMode mode, const std::vector< unsigned char >& iv  )
 {
      AesKeyLength keyLength = keyLengthFromKey( key );
 
@@ -46,10 +45,8 @@ void FileEncryptor::cryptFile( const std::vector< unsigned char >& key, CryptMod
      // выполняем шифрование
      std::vector< unsigned char > encryptedData;
      AESCryptography crypt( keyLength );
-     std::vector< unsigned char > iv;
      if( mode == CMCbc )
      {
-          iv = crypt.create_iv();
           encryptedData = crypt.cryptDataCBC( data, key, iv );
      }
      else
@@ -57,17 +54,11 @@ void FileEncryptor::cryptFile( const std::vector< unsigned char >& key, CryptMod
           encryptedData = crypt.cryptDataECB( data, key );
      }
 
-     // выполняем запись файл в формате: IV + шифртекст. Если IV нет - только шифртекст
-     if( !iv.empty() )
-     {
-          out.write( ( char* ) iv.data(), iv.size() );
-     }
-
      out.write( ( char* ) encryptedData.data(), encryptedData.size() );
 }
 
 
-void FileEncryptor::decryptFile( const std::vector<unsigned char>& key, CryptMode mode )
+void FileEncryptor::decryptFile( const std::vector<unsigned char>& key, CryptMode mode, const std::vector< unsigned char >& iv )
 {
      AesKeyLength keyLength = keyLengthFromKey( key );
 
@@ -97,13 +88,6 @@ void FileEncryptor::decryptFile( const std::vector<unsigned char>& key, CryptMod
           }
      }
 
-     // если алгоритм шифрования подразумевает наличие IV - считываем его из полученного массива
-     std::vector< unsigned char > iv;
-     if( mode == CMCbc )
-     {
-          iv = extractIv( data );
-     }
-
      // выполняем расшифрование
      std::vector< unsigned char > decryptedData;
      AESCryptography crypt( keyLength );
@@ -121,19 +105,6 @@ void FileEncryptor::decryptFile( const std::vector<unsigned char>& key, CryptMod
 
      // выполняем запись открытого текста в указанный файл
      out.write( ( char* ) decryptedData.data(), decryptedData.size() );
-}
-
-
-std::vector< unsigned char > FileEncryptor::extractIv( std::vector< unsigned char >& data )
-{
-     int ivSize = 16;
-     if( data.size() < ivSize )
-     {
-          throw std::runtime_error( "Input file corrupted" );
-     }
-     std::vector< unsigned char > iv( data.begin(), data.begin() + ivSize );
-     data.erase( data.begin(), data.begin() + ivSize );
-     return iv;
 }
 
 
