@@ -7,8 +7,8 @@ void printHelp()
 {
      std::cout << "Usage: {encrypt/decrypt} {CBC/ECB} {KEY in HEX format} {Source file path} {Destination file path} {OPTIONAL: IV in HEX format}" << std::endl;
      std::cout << "Examples:\n"
-                    "\tencrypt CBC 88CF1B7478A797F03F54527B50EF6D427B8F8C9C4EFB7FC20AA06B0DCD94FD35 file_to_crypt.txt encrypted_file.txt\n"
-                    "\tdecrypt CBC 88CF1B7478A797F03F54527B50EF6D427B8F8C9C4EFB7FC20AA06B0DCD94FD35 encrypted_file.txt decrypted_file.txt" << std::endl;
+                    "\tencrypt CBC 88CF1B7478A797F03F54527B50EF6D427B8F8C9C4EFB7FC20AA06B0DCD94FD35 file_to_crypt.txt encrypted_file.txt 88CF1B7478A797F03F54527B50EF6D41\n"
+                    "\tdecrypt CBC 88CF1B7478A797F03F54527B50EF6D427B8F8C9C4EFB7FC20AA06B0DCD94FD35 encrypted_file.txt decrypted_file.txt 88CF1B7478A797F03F54527B50EF6D41" << std::endl;
 }
 
 
